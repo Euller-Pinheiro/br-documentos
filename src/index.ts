@@ -11,7 +11,10 @@ export {
 export {
   calcularDvCnpj,
   ehCnpjAlfanumerico,
+  formatarCnpj,
+  gerarCnpj,
   limparCnpj,
   validarCnpj,
   valorCaractereCnpj,
+  type OpcoesGerarCnpj,
 } from "./cnpj.js";

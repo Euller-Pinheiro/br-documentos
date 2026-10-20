@@ -3,6 +3,8 @@ import {
   calcularDvCnpj,
   ehCnpjAlfanumerico,
   ErroDocumento,
+  formatarCnpj,
+  gerarCnpj,
   limparCnpj,
   validarCnpj,
   valorCaractereCnpj,
@@ -102,5 +104,70 @@ describe("ehCnpjAlfanumerico", () => {
   it("detecta letras", () => {
     expect(ehCnpjAlfanumerico(EXEMPLO_OFICIAL)).toBe(true);
     expect(ehCnpjAlfanumerico("11.222.333/0001-81")).toBe(false);
+  });
+});
+
+describe("formatarCnpj", () => {
+  it("formata numérico e alfanumérico", () => {
+    expect(formatarCnpj("11222333000181")).toBe("11.222.333/0001-81");
+    expect(formatarCnpj("12abc34501de35")).toBe("12.ABC.345/01DE-35");
+  });
+
+  it("é idempotente", () => {
+    expect(formatarCnpj("12.ABC.345/01DE-35")).toBe("12.ABC.345/01DE-35");
+  });
+
+  it("lança TAMANHO_INVALIDO para tamanho errado ou letra no DV", () => {
+    expect(() => formatarCnpj("1122233300018")).toThrow(
+      expect.objectContaining({ codigo: "TAMANHO_INVALIDO" }),
+    );
+    expect(() => formatarCnpj("12ABC34501DE3A")).toThrow(
+      expect.objectContaining({ codigo: "TAMANHO_INVALIDO" }),
+    );
+  });
+
+  it("lança CARACTERE_INVALIDO para símbolo estranho", () => {
+    expect(() => formatarCnpj("12*ABC*345/01DE-35")).toThrow(
+      expect.objectContaining({ codigo: "CARACTERE_INVALIDO" }),
+    );
+  });
+});
+
+describe("gerarCnpj", () => {
+  it("gera numéricos válidos de matriz por padrão", () => {
+    for (let i = 0; i < 300; i++) {
+      const cnpj = gerarCnpj();
+      expect(cnpj).toMatch(/^\d{8}0001\d{2}$/);
+      expect(validarCnpj(cnpj)).toBe(true);
+    }
+  });
+
+  it("gera alfanuméricos válidos e com pelo menos uma letra", () => {
+    for (let i = 0; i < 300; i++) {
+      const cnpj = gerarCnpj({ alfanumerico: true });
+      expect(ehCnpjAlfanumerico(cnpj)).toBe(true);
+      expect(validarCnpj(cnpj)).toBe(true);
+    }
+  });
+
+  it("respeita a ordem informada e a formatação", () => {
+    const cnpj = gerarCnpj({ alfanumerico: true, ordem: "01DE", formatado: true });
+    expect(cnpj).toMatch(/^[0-9A-Z]{2}\.[0-9A-Z]{3}\.[0-9A-Z]{3}\/01DE-\d{2}$/);
+    expect(validarCnpj(cnpj)).toBe(true);
+  });
+
+  it("insiste até sair uma letra quando o pedido é alfanumérico", () => {
+    // 8 sorteios caem em dígitos ("0"), depois a raiz inteira cai em "A".
+    const valores = [...Array<number>(8).fill(0), ...Array<number>(8).fill(10 / 36)];
+    let i = 0;
+    const cnpj = gerarCnpj({ alfanumerico: true, aleatorio: () => valores[i++] ?? 0 });
+    expect(cnpj.slice(0, 12)).toBe("AAAAAAAA0001");
+    expect(validarCnpj(cnpj)).toBe(true);
+  });
+
+  it("recusa ordem inválida", () => {
+    expect(() => gerarCnpj({ ordem: "01DE" })).toThrow(ErroDocumento);
+    expect(() => gerarCnpj({ ordem: "001" })).toThrow(ErroDocumento);
+    expect(() => gerarCnpj({ alfanumerico: true, ordem: "01-E" })).toThrow(ErroDocumento);
   });
 });

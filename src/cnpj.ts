@@ -1,8 +1,11 @@
 import { ErroDocumento } from "./erros.js";
-import { dvModulo11, todosIguais } from "./internal/modulo11.js";
+import { dvModulo11, sortear, todosIguais, type GeradorAleatorio } from "./internal/modulo11.js";
 
 const TAMANHO_CNPJ = 14;
 const TAMANHO_BASE_CNPJ = 12;
+const TAMANHO_RAIZ_CNPJ = 8;
+const DIGITOS = "0123456789";
+const ALFANUMERICOS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /** Pesos do 1º DV (12 posições) e do 2º DV (13 posições): 2 a 9, da direita para a esquerda. */
 const PESOS_DV1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] as const;
@@ -80,4 +83,65 @@ export function validarCnpj(valor: string): boolean {
 /** Verdadeiro quando o CNPJ (válido ou não) contém pelo menos uma letra. */
 export function ehCnpjAlfanumerico(valor: string): boolean {
   return /[A-Z]/.test(limparCnpj(valor));
+}
+
+/**
+ * Formata no padrão AA.AAA.AAA/AAAA-DV (por exemplo 12.ABC.345/01DE-35).
+ * Só confere o formato; use `validarCnpj` para conferir os DVs.
+ *
+ * @throws {ErroDocumento} se houver caractere estranho ou o formato não for 12 posições + 2 dígitos
+ */
+export function formatarCnpj(valor: string): string {
+  if (!ENTRADA_CNPJ.test(valor)) {
+    throw new ErroDocumento("CARACTERE_INVALIDO", `CNPJ com caractere inválido: "${valor}"`);
+  }
+  const cnpj = limparCnpj(valor);
+  if (!FORMATO_CNPJ.test(cnpj)) {
+    throw new ErroDocumento(
+      "TAMANHO_INVALIDO",
+      `CNPJ precisa ter 12 posições alfanuméricas e 2 dígitos verificadores; recebido: "${valor}"`,
+    );
+  }
+  return `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`;
+}
+
+export interface OpcoesGerarCnpj {
+  /** Gera raiz e ordem com letras e números (novo formato). Padrão: `false` (só dígitos). */
+  alfanumerico?: boolean;
+  /**
+   * Número de ordem do estabelecimento (posições 9 a 12): "0001" é a matriz.
+   * Padrão: `"0001"`. Aceita letras quando `alfanumerico` for `true`.
+   */
+  ordem?: string;
+  /** Devolve com pontuação. Padrão: `false`. */
+  formatado?: boolean;
+  /** Fonte de aleatoriedade no formato de `Math.random`. Útil para testes determinísticos. */
+  aleatorio?: GeradorAleatorio;
+}
+
+/**
+ * Gera um CNPJ válido **para testes e dados fictícios**. O número pode
+ * coincidir com uma empresa real; não use para identificar ninguém.
+ *
+ * @throws {ErroDocumento} se `ordem` não tiver 4 posições compatíveis com o tipo pedido
+ */
+export function gerarCnpj(opcoes: OpcoesGerarCnpj = {}): string {
+  const { alfanumerico = false, ordem = "0001", formatado = false, aleatorio = Math.random } = opcoes;
+  const formatoOrdem = alfanumerico ? /^[0-9A-Z]{4}$/ : /^[0-9]{4}$/;
+  if (!formatoOrdem.test(ordem)) {
+    throw new ErroDocumento(
+      "CARACTERE_INVALIDO",
+      `A ordem precisa ter 4 ${alfanumerico ? "posições de 0-9/A-Z" : "dígitos"}; recebido: "${ordem}"`,
+    );
+  }
+  const alfabeto = alfanumerico ? ALFANUMERICOS : DIGITOS;
+  let base: string;
+  do {
+    const raiz = Array.from({ length: TAMANHO_RAIZ_CNPJ }, () => sortear(alfabeto, aleatorio)).join("");
+    base = raiz + ordem;
+    // Um gerador "alfanumérico" que sorteasse só dígitos devolveria um CNPJ numérico:
+    // insiste até sair pelo menos uma letra, para o resultado ser do tipo pedido.
+  } while (todosIguais(base) || (alfanumerico && !/[A-Z]/.test(base)));
+  const cnpj = base + calcularDvCnpj(base);
+  return formatado ? formatarCnpj(cnpj) : cnpj;
 }
