@@ -8,3 +8,10 @@ export {
   validarCpf,
   type OpcoesGerarCpf,
 } from "./cpf.js";
+export {
+  calcularDvCnpj,
+  ehCnpjAlfanumerico,
+  limparCnpj,
+  validarCnpj,
+  valorCaractereCnpj,
+} from "./cnpj.js";
